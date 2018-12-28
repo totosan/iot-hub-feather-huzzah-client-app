@@ -11,6 +11,7 @@ void readCredentials()
     ssid = (char *)malloc(SSID_LEN);
     pass = (char *)malloc(PASS_LEN);
     connectionString = (char *)malloc(CONNECTION_STRING_LEN);
+    deviceId = (char *)malloc(DEVICE_ID_LEN);
 
     // try to read out the credential information, if failed, the length should be 0.
     int ssidLength = EEPROMread(ssidAddr, ssid);
@@ -19,6 +20,10 @@ void readCredentials()
 
     if (ssidLength > 0 && passLength > 0 && connectionStringLength > 0 && !needEraseEEPROM())
     {
+        /*char** conn = getToken(connectionString, connectionStringLength, ";");
+        printf("This is token for device Id %s\r\n",conn[1]);
+        deviceId = strdup(conn[1]);*/
+        GetDeviceId(connectionString, connectionStringLength);
         return;
     }
 
@@ -31,12 +36,20 @@ void readCredentials()
 
     readFromSerial("Input your Azure IoT hub device connection string: ", connectionString, CONNECTION_STRING_LEN, 0);
     EEPROMWrite(connectionStringAddr, connectionString, strlen(connectionString));
+    GetDeviceId(connectionString, connectionStringLength);
+
+}
+
+char * GetDeviceId(char *buffer, int cnnStrLen){
+    char** conn = getToken(buffer, cnnStrLen, ";");
+    deviceId = getToken(conn[1],sizeof(conn[1]),"=")[1];
+    printf("This is token for device Id %s\r\n",deviceId);
 }
 
 bool needEraseEEPROM()
 {
     char result = 'n';
-    readFromSerial("Do you need re-input your credential information?(Auto skip this after 5 seconds)[Y/n]", &result, 1, 5000);
+    readFromSerial("Do you need re-input your credential information?(Auto skip this after 5 seconds)[Y/n]", &result, 2, 5000);
     if (result == 'Y' || result == 'y')
     {
         clearParam();

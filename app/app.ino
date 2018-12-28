@@ -19,14 +19,15 @@ static bool messageSending = true;
 static char *connectionString;
 static char *ssid;
 static char *pass;
+static char *deviceId;
 
 static int interval = INTERVAL;
 
 void blinkLED()
 {
-    digitalWrite(LED_PIN, HIGH);
-    delay(500);
     digitalWrite(LED_PIN, LOW);
+    delay(100);
+    digitalWrite(LED_PIN, HIGH);
 }
 
 void initWifi()
@@ -95,7 +96,7 @@ void setup()
     iotHubClientHandle = IoTHubClient_LL_CreateFromConnectionString(connectionString, MQTT_Protocol);
     if (iotHubClientHandle == NULL)
     {
-        Serial.println("Failed on IoTHubClient_CreateFromConnectionString.");
+        Serial.printf("Failed on IoTHubClient_CreateFromConnectionString. %s\r\n", connectionString);
         while (1);
     }
 
