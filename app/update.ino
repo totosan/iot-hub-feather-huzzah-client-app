@@ -1,7 +1,7 @@
 
 #include <ESP8266httpUpdate.h>
 
-static char* updateUrl = "https://totosto.blob.core.windows.net/firmware/firmware.ino";
+static char* updateUrl = "https://totosto.blob.core.windows.net/firmware/app.ino.bin";
 
 void HandleUpdate()
 {
