@@ -43,7 +43,7 @@ float readHumidity()
 bool readMessage(int messageId, char *payload)
 {
     float temperature = readTemperature();
-    printf("Temp: %.2f\r\n",temperature);
+    //printf("Temp: %.2f\r\n",temperature);
     float humidity = readHumidity();
     StaticJsonBuffer<MESSAGE_MAX_LEN> jsonBuffer;
     JsonObject &root = jsonBuffer.createObject();
