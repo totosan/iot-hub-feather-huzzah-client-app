@@ -45,7 +45,7 @@ void initWifi()
         uint8_t mac[6];
         WiFi.macAddress(mac);
         Serial.printf("You device with MAC address %02x:%02x:%02x:%02x:%02x:%02x connects to %s failed! Waiting 10 seconds to retry.\r\n",
-                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], ssid);
+                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], ssid);
         WiFi.begin(ssid, pass);
         delay(10000);
     }
@@ -97,7 +97,8 @@ void setup()
     if (iotHubClientHandle == NULL)
     {
         Serial.printf("Failed on IoTHubClient_CreateFromConnectionString. %s\r\n", connectionString);
-        while (1);
+        while (1)
+            ;
     }
 
     IoTHubClient_LL_SetOption(iotHubClientHandle, "product_info", "HappyPath_AdafruitFeatherHuzzah-C");
@@ -113,8 +114,11 @@ void loop()
     {
         char messagePayload[MESSAGE_MAX_LEN];
         bool temperatureAlert = readMessage(messageCount, messagePayload);
-        sendMessage(iotHubClientHandle, messagePayload, temperatureAlert);
-        messageCount++;
+        if (!temperatureAlert)
+        {
+            sendMessage(iotHubClientHandle, messagePayload, temperatureAlert);
+            messageCount++;
+        }
         delay(interval);
     }
     IoTHubClient_LL_DoWork(iotHubClientHandle);

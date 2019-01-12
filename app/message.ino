@@ -59,11 +59,6 @@ bool readMessage(int messageId, char *payload)
     else
     {
         root["temperature"] = temperature;
-        
-        if (temperature > TEMPERATURE_ALERT)
-        {
-            temperatureAlert = true;
-        }
     }
 
     if (std::isnan(humidity))
@@ -75,7 +70,7 @@ bool readMessage(int messageId, char *payload)
         root["humidity"] = humidity;
     }
     root.printTo(payload, MESSAGE_MAX_LEN);
-    return temperatureAlert;
+    return root["temperature"] == NULL;
 }
 
 void parseTwinMessage(char *message)
