@@ -45,8 +45,7 @@ bool readMessage(int messageId, char *payload)
     float temperature = readTemperature();
     //printf("Temp: %.2f\r\n",temperature);
     float humidity = readHumidity();
-    StaticJsonBuffer<MESSAGE_MAX_LEN> jsonBuffer;
-    JsonObject &root = jsonBuffer.createObject();
+    StaticJsonDocument<MESSAGE_MAX_LEN> root;
     root["deviceId"] = deviceId;
     root["messageId"] = messageId;
     bool temperatureAlert = false;
@@ -69,21 +68,21 @@ bool readMessage(int messageId, char *payload)
     {
         root["humidity"] = humidity;
     }
-    root.printTo(payload, MESSAGE_MAX_LEN);
+    serializeJson(root, payload, MESSAGE_MAX_LEN);
     return root["temperature"] == NULL;
 }
 
 void parseTwinMessage(char *message)
 {
-    StaticJsonBuffer<MESSAGE_MAX_LEN> jsonBuffer;
-    JsonObject &root = jsonBuffer.parseObject(message);
-    if (!root.success())
+    StaticJsonDocument<MESSAGE_MAX_LEN> root;
+    deserializeJson(root, message);
+    if (!root.isNull())
     {
         Serial.printf("Parse %s failed.\r\n", message);
         return;
     }
 
-    if (root["desired"]["interval"].success())
+    if (root["desired"]["interval"].isNull())
     {
         interval = root["desired"]["interval"];
     }
