@@ -1,0 +1,1 @@
+C:\Users\ttomow\AppData\Local\Arduino15\packages\esp8266\tools\esptool\0.4.13/esptool.exe -vv -cd nodemcu -cb 921600 -cp COM4 -ca 0x00000 -cf c:\temp/app.ino.bin 

@@ -1,3 +1,5 @@
+#include "GeneralModel.h"
+
 static WiFiClientSecure sslClient; // for ESP8266
 
 const char *onSuccess = "\"Successfully invoke device method\"";
@@ -13,26 +15,15 @@ const char *notFound = "\"No method found\"";
  *    compile error
 */
 
-/*
- * #ifdef AzureIoTHubVersion
- * static AzureIoTHubClient iotHubClient;
- * void initIoThubClient()
- * {
- *     iotHubClient.begin(sslClient);
- * }
- * #else
- * static AzureIoTHubClient iotHubClient(sslClient);
- * void initIoThubClient()
- * {
- *     iotHubClient.begin();
- * }
- * #endif
- */
-
 static void sendCallback(IOTHUB_CLIENT_CONFIRMATION_RESULT result, void *userContextCallback)
 {
     if (IOTHUB_CLIENT_CONFIRMATION_OK == result)
     {
+        General* general = (General*)userContextCallback;
+        if(NULL == general){
+            Serial.println("userContextCallback is NULL");
+        }
+
         Serial.println("Message sent to Azure IoT Hub");
         blinkLED();
     }
@@ -67,6 +58,18 @@ static void sendMessage(IOTHUB_CLIENT_LL_HANDLE iotHubClientHandle, char *buffer
 
         IoTHubMessage_Destroy(messageHandle);
     }
+}
+
+static void reportedStateCallback(int status_code, void *userContextCallback)
+{
+    (void)userContextCallback;
+    printf("Device Twin reported properties update completed with result: %d\r\n", status_code);
+}
+
+static void reportState(General *general)
+{
+    char *reportedProperties = getSerializedMessage(general);
+    (void)IoTHubClient_LL_SendReportedState(iotHubClientHandle, (const unsigned char *)reportedProperties, strlen(reportedProperties), reportedStateCallback, NULL);
 }
 
 void start()
@@ -118,6 +121,12 @@ int deviceMethodCallback(
     size_t *response_size,
     void *userContextCallback)
 {
+    General* general = (General*)userContextCallback;
+    if(NULL==general){
+        printf("userContextCallback is NULL\n");
+        return 0;
+    }
+
     Serial.printf("Try to invoke method %s.\r\n", methodName);
     const char *responseMessage = onSuccess;
     int result = 200;
@@ -141,6 +150,8 @@ int deviceMethodCallback(
     *response = (unsigned char *)malloc(*response_size);
     strncpy((char *)(*response), responseMessage, *response_size);
 
+    reportState(oldGeneral);
+
     return result;
 }
 
@@ -150,12 +161,40 @@ void twinCallback(
     size_t size,
     void *userContextCallback)
 {
+
+    printf("Device Twin update received (state=%s, size=%u): \r\n", ENUM_TO_STRING(DEVICE_TWIN_UPDATE_STATE, updateState), size);
+    for (size_t n = 0; n < size; n++)
+    {
+        printf("%c", payLoad[n]);
+    }
+    printf("\r\n");
+
     char *temp = (char *)malloc(size + 1);
-    for (int i = 0; i < size; i++)
+    for (size_t i = 0; i < size; i++)
     {
         temp[i] = (char)(payLoad[i]);
     }
     temp[size] = '\0';
-    parseTwinMessage(temp);
+
+    printf("Device Twin Msg (temp) \n");
+    General *oldGeneral = (General *)userContextCallback;
+    if (NULL == oldGeneral)
+    {
+        printf("oldGeneral is null\n");
+        return;
+    }
+    General *newGeneral = parseTwinMessage(temp);
+    printf("assigning desired states\n");
+    printf("desired_interval: %i\n", oldGeneral->settings.desired_interval);
+    if (oldGeneral->settings.desired_interval != newGeneral->settings.desired_interval)
+    {
+        oldGeneral->settings.desired_interval = newGeneral->settings.desired_interval;
+    }
+    if (oldGeneral->settings.update_url != newGeneral->settings.update_url)
+    {
+        oldGeneral->settings.update_url = newGeneral->settings.update_url;
+    }
+    printf("reporting states\n");
+    reportState(oldGeneral);
     free(temp);
 }

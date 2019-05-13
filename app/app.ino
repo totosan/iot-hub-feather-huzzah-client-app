@@ -12,6 +12,7 @@
 #include <AzureIoTUtility.h>
 
 #include "config.h"
+#include "GeneralModel.h"
 
 static bool messagePending = false;
 static bool messageSending = true;
@@ -22,6 +23,8 @@ static char *pass;
 static char *deviceId;
 
 static int interval = INTERVAL;
+static bool hasIoTHub = false;
+static bool hasWifi = false;
 
 void blinkLED()
 {
@@ -35,6 +38,7 @@ void initWifi()
     // Attempt to connect to Wifi network:
     Serial.printf("Attempting to connect to SSID: %s.\r\n", ssid);
 
+#ifndef oldWifiWay 
     // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
     WiFi.begin(ssid, pass);
     while (WiFi.status() != WL_CONNECTED)
@@ -50,6 +54,22 @@ void initWifi()
         delay(10000);
     }
     Serial.printf("Connected to wifi %s.\r\n", ssid);
+#else
+    delay(10);
+  WiFi.mode(WIFI_AP);
+  WiFi.begin(ssid, pass);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+    hasWifi = false;
+  }
+  hasWifi = true;
+  
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println(" > IoT Hub");
+#endif
 }
 
 void initTime()
@@ -75,6 +95,9 @@ void initTime()
 }
 
 static IOTHUB_CLIENT_LL_HANDLE iotHubClientHandle;
+
+static General general;
+
 void setup()
 {
     pinMode(LED_PIN, OUTPUT);
@@ -101,10 +124,17 @@ void setup()
             ;
     }
 
+    memset(&general,0,sizeof(General));
+    general.settings.desired_interval = interval;
+    general.state.reported_interval = interval;
+    general.state.version = "1.0";
+
     IoTHubClient_LL_SetOption(iotHubClientHandle, "product_info", "HappyPath_AdafruitFeatherHuzzah-C");
-    IoTHubClient_LL_SetMessageCallback(iotHubClientHandle, receiveMessageCallback, NULL);
-    IoTHubClient_LL_SetDeviceMethodCallback(iotHubClientHandle, deviceMethodCallback, NULL);
-    IoTHubClient_LL_SetDeviceTwinCallback(iotHubClientHandle, twinCallback, NULL);
+    IoTHubClient_LL_SetMessageCallback(iotHubClientHandle, receiveMessageCallback, &general);
+    IoTHubClient_LL_SetDeviceMethodCallback(iotHubClientHandle, deviceMethodCallback, &general);
+    IoTHubClient_LL_SetDeviceTwinCallback(iotHubClientHandle, twinCallback, &general);
+
+    reportState(&general);
 }
 
 static int messageCount = 1;

@@ -1,7 +1,7 @@
-
 #include <Adafruit_Sensor.h>
 #include <ArduinoJson.h>
 #include <DHT.h>
+#include "GeneralModel.h"
 
 #if SIMULATED_DATA
 
@@ -43,7 +43,6 @@ float readHumidity()
 bool readMessage(int messageId, char *payload)
 {
     float temperature = readTemperature();
-    //printf("Temp: %.2f\r\n",temperature);
     float humidity = readHumidity();
     StaticJsonDocument<MESSAGE_MAX_LEN> root;
     root["deviceId"] = deviceId;
@@ -69,20 +68,43 @@ bool readMessage(int messageId, char *payload)
         root["humidity"] = humidity;
     }
     serializeJson(root, payload, MESSAGE_MAX_LEN);
+    printf("Payload: %s\r\n\0", payload);
     return root["temperature"] == NULL;
 }
 
-void parseTwinMessage(char *message)
+char *getSerializedMessage(General *general)
 {
+    char payload[MESSAGE_MAX_LEN]; // = (char*)malloc(MESSAGE_MAX_LEN);
+
     StaticJsonDocument<MESSAGE_MAX_LEN> root;
-    deserializeJson(root, message);
-    if (!root.isNull())
+    root["interval"] = general->state.reported_interval;
+    root["softwareVersion"] = general->state.version;
+    serializeJson(root, payload, (size_t)MESSAGE_MAX_LEN);
+    return payload;
+}
+
+General *parseTwinMessage(char *message)
+{
+    printf("parsing twin message\n");
+    General *general = (General *)malloc(sizeof(General));
+
+    if (NULL == general)
     {
-        Serial.printf("Parse %s failed.\r\n", message);
-        return;
+        (void)printf("ERROR: Failed to allocate memory\r\n");
     }
 
-    if (root["desired"]["interval"].isNull())
+    printf("start deserializing message..\n\0");
+    StaticJsonDocument<MESSAGE_MAX_LEN> root;
+    deserializeJson(root, message);
+    printf("deserialized\n");
+    if (root.isNull())
+    {
+        Serial.printf("Parse %s failed.\r\n", message);
+        return 0;
+    }
+    printf("checking desired_interval\n");
+    // interval
+    if (!root["desired"]["interval"].isNull())
     {
         interval = root["desired"]["interval"];
     }
@@ -90,4 +112,20 @@ void parseTwinMessage(char *message)
     {
         interval = root["interval"];
     }
+    printf("setting interval to general\n");
+    general->settings.desired_interval = interval;
+    printf("general->settings.desired_interval assigned with %i\n", interval);
+    // version
+    if (!root["desired"]["softwareVersion"].isNull())
+    {
+        printf("Setting general->state.version to %s\n", root["desired"]["softwareVersion"]);
+        general->state.version = root["desired"]["softwareVersion"];
+    }
+    else if (root.containsKey("softwareVersion"))
+    {
+        general->state.version = root["softwareVersion"];
+    }
+
+    printf("everything done.. returning to caller\n");
+    return general;
 }
