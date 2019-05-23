@@ -2,6 +2,7 @@
 #include <ArduinoJson.h>
 #include <DHT.h>
 #include "GeneralModel.h"
+#include <ESP8266WiFi.h>
 
 #if SIMULATED_DATA
 
@@ -74,11 +75,14 @@ bool readMessage(int messageId, char *payload)
 
 char *getSerializedMessage(General *general)
 {
-    char payload[MESSAGE_MAX_LEN]; // = (char*)malloc(MESSAGE_MAX_LEN);
-
+    char payload[MESSAGE_MAX_LEN];
     StaticJsonDocument<MESSAGE_MAX_LEN> root;
     root["interval"] = general->state.reported_interval;
-    root["softwareVersion"] = general->state.version;
+    root["fwVersion"] = general->state.version;
+    root["update_state"] = general->state.update_state;
+    root["update_url"] = general->settings.update_url;
+    root["device"]["heap_free"] = ESP.getFreeHeap();
+    root["device"]["sketch_free"] = ESP.getFreeSketchSpace();
     serializeJson(root, payload, (size_t)MESSAGE_MAX_LEN);
     return payload;
 }
@@ -93,39 +97,56 @@ General *parseTwinMessage(char *message)
         (void)printf("ERROR: Failed to allocate memory\r\n");
     }
 
-    printf("start deserializing message..\n\0");
     StaticJsonDocument<MESSAGE_MAX_LEN> root;
     deserializeJson(root, message);
     printf("deserialized\n");
+
     if (root.isNull())
     {
-        Serial.printf("Parse %s failed.\r\n", message);
+        Serial.printf("Parse %s failed.\n", message);
         return 0;
     }
+
     printf("checking desired_interval\n");
     // interval
     if (!root["desired"]["interval"].isNull())
     {
-        interval = root["desired"]["interval"];
+        general->settings.desired_interval = root["desired"]["interval"];
     }
     else if (root.containsKey("interval"))
     {
-        interval = root["interval"];
-    }
-    printf("setting interval to general\n");
-    general->settings.desired_interval = interval;
-    printf("general->settings.desired_interval assigned with %i\n", interval);
-    // version
-    if (!root["desired"]["softwareVersion"].isNull())
-    {
-        printf("Setting general->state.version to %s\n", root["desired"]["softwareVersion"]);
-        general->state.version = root["desired"]["softwareVersion"];
-    }
-    else if (root.containsKey("softwareVersion"))
-    {
-        general->state.version = root["softwareVersion"];
+        general->settings.desired_interval = root["interval"];
     }
 
-    printf("everything done.. returning to caller\n");
+    printf("desired interval:%i\n", general->settings.desired_interval);
+
+    // version
+    if (!root["desired"]["fwVersion"].isNull())
+    {
+        strcpy(general->state.version, root["desired"]["fwVersion"]);
+    }
+    else if (root.containsKey("fwVersion"))
+    {
+        strcpy(general->state.version, root["fwVersion"]);
+    }
+
+    printf("version :%s\r\n", general->state.version);
+
+    // update url
+    if (!root["desired"]["update_url"].isNull())
+    {
+        if (sizeof general->settings.update_url > sizeof((const char *)root["desired"]["update_url"]))
+        {
+            strcpy(general->settings.update_url, (const char *)root["desired"]["update_url"]);
+        }
+    }
+    else if (root.containsKey("update_url"))
+    {
+        if (sizeof general->settings.update_url > sizeof((const char *)root["update_url"]))
+        {
+            strcpy(general->settings.update_url, (const char *)root["update_url"]);
+        }
+    }
+    printf("update url:%s sizeof %d strlen %d\r\n", general->settings.update_url, sizeof general->settings.update_url, strlen(general->settings.update_url));
     return general;
 }

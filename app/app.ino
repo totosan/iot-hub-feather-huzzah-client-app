@@ -2,6 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 // Please use an Arduino IDE 1.6.8 or greater
+#define newWifiWay
 
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
@@ -10,12 +11,16 @@
 #include <AzureIoTHub.h>
 #include <AzureIoTProtocol_MQTT.h>
 #include <AzureIoTUtility.h>
-
 #include "config.h"
 #include "GeneralModel.h"
 
+static char *SW_VERSION = "1.1";
+
 static bool messagePending = false;
 static bool messageSending = true;
+static bool updatePending = false;
+static bool stateReporting = false;
+static bool stateSent = false;
 
 static char *connectionString;
 static char *ssid;
@@ -26,11 +31,36 @@ static int interval = INTERVAL;
 static bool hasIoTHub = false;
 static bool hasWifi = false;
 
-void blinkLED()
+os_timer_t myTimer;
+bool tickOccured;
+
+// start of timerCallback
+void timerCallback(void *pArg)
 {
-    digitalWrite(LED_PIN, LOW);
+
+    tickOccured = true;
+
+} // End of timerCallback
+
+void user_init(void)
+{
+    /*
+  os_timer_setfn - Define a function to be called when the timer fires
+https://www.switchdoc.com/2015/10/iot-esp8266-timer-tutorial-arduino-ide/
+void os_timer_setfn(
+      os_timer_t *pTimer,
+      os_timer_func_t *pFunction,
+      void *pArg)
+*/
+    os_timer_setfn(&myTimer, timerCallback, NULL);
+    os_timer_arm(&myTimer, 1000, true);
+} // End of user_init
+
+void blinkLED(bool reverse)
+{
+    digitalWrite(LED_PIN, (reverse) ? HIGH : LOW);
     delay(100);
-    digitalWrite(LED_PIN, HIGH);
+    digitalWrite(LED_PIN, (reverse) ? LOW : HIGH);
 }
 
 void initWifi()
@@ -38,7 +68,7 @@ void initWifi()
     // Attempt to connect to Wifi network:
     Serial.printf("Attempting to connect to SSID: %s.\r\n", ssid);
 
-#ifndef oldWifiWay 
+#ifndef newWifiWay
     // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
     WiFi.begin(ssid, pass);
     while (WiFi.status() != WL_CONNECTED)
@@ -56,19 +86,20 @@ void initWifi()
     Serial.printf("Connected to wifi %s.\r\n", ssid);
 #else
     delay(10);
-  WiFi.mode(WIFI_AP);
-  WiFi.begin(ssid, pass);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-    hasWifi = false;
-  }
-  hasWifi = true;
-  
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-  Serial.println(" > IoT Hub");
+    WiFi.mode(WIFI_AP);
+    WiFi.begin(ssid, pass);
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(500);
+        Serial.print(".");
+        hasWifi = false;
+    }
+    hasWifi = true;
+
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+    Serial.println(" > IoT Hub");
 #endif
 }
 
@@ -110,6 +141,9 @@ void setup()
     initTime();
     initSensor();
 
+    tickOccured = false;
+    //user_init();
+
     /*
      * AzureIotHub library remove AzureIoTHubClient class in 1.0.34, so we remove the code below to avoid
      *    compile error
@@ -124,12 +158,14 @@ void setup()
             ;
     }
 
-    memset(&general,0,sizeof(General));
+    memset(&general, 0, sizeof(General));
     general.settings.desired_interval = interval;
     general.state.reported_interval = interval;
-    general.state.version = "1.0";
+    strcpy(general.state.version, SW_VERSION);
+    *general.state.update_state = {'\0'};
+    *general.settings.update_url = {'\0'};
 
-    IoTHubClient_LL_SetOption(iotHubClientHandle, "product_info", "HappyPath_AdafruitFeatherHuzzah-C");
+    IoTHubClient_LL_SetOption(iotHubClientHandle, "dwx_sample", "Updating_firmware_DevOps");
     IoTHubClient_LL_SetMessageCallback(iotHubClientHandle, receiveMessageCallback, &general);
     IoTHubClient_LL_SetDeviceMethodCallback(iotHubClientHandle, deviceMethodCallback, &general);
     IoTHubClient_LL_SetDeviceTwinCallback(iotHubClientHandle, twinCallback, &general);
@@ -140,17 +176,44 @@ void setup()
 static int messageCount = 1;
 void loop()
 {
-    if (!messagePending && messageSending)
+    if (tickOccured == true)
     {
-        char messagePayload[MESSAGE_MAX_LEN];
-        bool temperatureAlert = readMessage(messageCount, messagePayload);
-        if (!temperatureAlert)
-        {
-            sendMessage(iotHubClientHandle, messagePayload, temperatureAlert);
-            messageCount++;
-        }
-        delay(interval);
+        Serial.println("Ticked");
+        tickOccured = false;
     }
-    IoTHubClient_LL_DoWork(iotHubClientHandle);
+
+    if (!updatePending)
+    {
+        if (!messagePending && messageSending)
+        {
+            Serial.println("Message loop");
+            char messagePayload[MESSAGE_MAX_LEN];
+            bool temperatureAlert = readMessage(messageCount, messagePayload);
+            if (!temperatureAlert)
+            {
+                sendMessage(iotHubClientHandle, messagePayload, temperatureAlert);
+                messageCount++;
+            }
+            Serial.println("Waiting for delay");
+            delay(interval);
+        }
+    }
+    else // updatePending
+    {
+        if (!stateReporting && !stateSent)
+        {
+            strcpy(general.state.update_state, "DOWNLOADING");
+            reportState(&general);
+            stateSent = true;
+        }
+        if (!stateReporting)
+        {
+            HandleUpdate(&general);
+            updatePending = false;
+        }
+    }
+    {
+        IoTHubClient_LL_DoWork(iotHubClientHandle);
+    }
     delay(10);
 }

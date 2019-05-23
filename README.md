@@ -4,6 +4,8 @@ platforms: arduino
 author: xshi
 ---
 
+! https://www.grc.com/fingerprints.htm
+
 # IoT Hub Feather HUZZAH Client application 
 [![Build Status](https://travis-ci.org/Azure-Samples/iot-hub-feather-huzzah-client-app.svg?branch=master)](https://travis-ci.org/Azure-Samples/iot-hub-feather-huzzah-client-app)
 

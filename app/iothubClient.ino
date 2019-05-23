@@ -19,13 +19,14 @@ static void sendCallback(IOTHUB_CLIENT_CONFIRMATION_RESULT result, void *userCon
 {
     if (IOTHUB_CLIENT_CONFIRMATION_OK == result)
     {
-        General* general = (General*)userContextCallback;
-        if(NULL == general){
+        General *oldGeneral = (General *)userContextCallback;
+        if (NULL == oldGeneral)
+        {
             Serial.println("userContextCallback is NULL");
         }
 
         Serial.println("Message sent to Azure IoT Hub");
-        blinkLED();
+        blinkLED(true);
     }
     else
     {
@@ -58,18 +59,6 @@ static void sendMessage(IOTHUB_CLIENT_LL_HANDLE iotHubClientHandle, char *buffer
 
         IoTHubMessage_Destroy(messageHandle);
     }
-}
-
-static void reportedStateCallback(int status_code, void *userContextCallback)
-{
-    (void)userContextCallback;
-    printf("Device Twin reported properties update completed with result: %d\r\n", status_code);
-}
-
-static void reportState(General *general)
-{
-    char *reportedProperties = getSerializedMessage(general);
-    (void)IoTHubClient_LL_SendReportedState(iotHubClientHandle, (const unsigned char *)reportedProperties, strlen(reportedProperties), reportedStateCallback, NULL);
 }
 
 void start()
@@ -108,7 +97,7 @@ IOTHUBMESSAGE_DISPOSITION_RESULT receiveMessageCallback(IOTHUB_MESSAGE_HANDLE me
         temp[size] = '\0';
         Serial.printf("Receive C2D message: %s.\r\n", temp);
         free(temp);
-        blinkLED();
+        blinkLED(true);
     }
     return IOTHUBMESSAGE_ACCEPTED;
 }
@@ -121,8 +110,9 @@ int deviceMethodCallback(
     size_t *response_size,
     void *userContextCallback)
 {
-    General* general = (General*)userContextCallback;
-    if(NULL==general){
+    General *oldGeneral = (General *)userContextCallback;
+    if (NULL == oldGeneral)
+    {
         printf("userContextCallback is NULL\n");
         return 0;
     }
@@ -155,13 +145,39 @@ int deviceMethodCallback(
     return result;
 }
 
+/*
+*   Device Twin Handling
+*/
+
+static void reportedStateCallback(int status_code, void *userContextCallback)
+{
+    (void)userContextCallback;
+    printf("Device Twin reported properties update completed with result: %d\r\n", status_code);
+    stateReporting = false;
+}
+
+static void reportState(General *oldGeneral)
+{
+    stateReporting = true;
+    oldGeneral->state.reported_interval = oldGeneral->settings.desired_interval;
+    printf("reporting state\r\n");
+    char *reportedProperties = getSerializedMessage(oldGeneral);
+    int size = strlen(reportedProperties);
+    for (int i = 0; i < size; i++)
+    {
+        printf("%c", reportedProperties[i]);
+    }
+    printf("\r\n");
+
+    (void)IoTHubClient_LL_SendReportedState(iotHubClientHandle, (const unsigned char *)reportedProperties, strlen(reportedProperties), reportedStateCallback, NULL);
+}
+
 void twinCallback(
     DEVICE_TWIN_UPDATE_STATE updateState,
     const unsigned char *payLoad,
     size_t size,
     void *userContextCallback)
 {
-
     printf("Device Twin update received (state=%s, size=%u): \r\n", ENUM_TO_STRING(DEVICE_TWIN_UPDATE_STATE, updateState), size);
     for (size_t n = 0; n < size; n++)
     {
@@ -176,25 +192,46 @@ void twinCallback(
     }
     temp[size] = '\0';
 
-    printf("Device Twin Msg (temp) \n");
     General *oldGeneral = (General *)userContextCallback;
     if (NULL == oldGeneral)
     {
-        printf("oldGeneral is null\n");
+        printf("general is null\n");
         return;
     }
+
     General *newGeneral = parseTwinMessage(temp);
     printf("assigning desired states\n");
-    printf("desired_interval: %i\n", oldGeneral->settings.desired_interval);
-    if (oldGeneral->settings.desired_interval != newGeneral->settings.desired_interval)
+    printf("old to new values: \r\n");
+    printf("\tversion: %s\t\t-->: %s\r\n", oldGeneral->state.version, newGeneral->state.version);
+    printf("\tinterval: %i\t\t-->: %i\r\n", oldGeneral->settings.desired_interval, newGeneral->settings.desired_interval);
+    if (NULL != oldGeneral->settings.update_url)
     {
+        printf("\turl: %s\t\t-->: %s\r\n", oldGeneral->settings.update_url, newGeneral->settings.update_url);
+    }
+    if (oldGeneral->settings.desired_interval != newGeneral->state.reported_interval)
+    {
+        if (NULL == newGeneral->settings.desired_interval || newGeneral->settings.desired_interval < 500)
+        {
+            newGeneral->settings.desired_interval = 500;
+            printf("Interval invalid (%i)! Setting to 500ms.\n", newGeneral->settings.desired_interval);
+        }
         oldGeneral->settings.desired_interval = newGeneral->settings.desired_interval;
+        printf("set interval: %i\n", oldGeneral->settings.desired_interval);
     }
-    if (oldGeneral->settings.update_url != newGeneral->settings.update_url)
+
+    if (strcmp(oldGeneral->state.version, newGeneral->state.version)<0)
     {
-        oldGeneral->settings.update_url = newGeneral->settings.update_url;
+        strcpy(oldGeneral->state.version, newGeneral->state.version);
+        printf("should trigger update with version: %s sizeof %d strlen %d\n", oldGeneral->state.version, sizeof(oldGeneral->state.version), strlen(oldGeneral->state.version));
+        updatePending = true;
     }
-    printf("reporting states\n");
-    reportState(oldGeneral);
+
+    if (oldGeneral->settings.update_url != '\0' || strcmp(oldGeneral->settings.update_url, newGeneral->settings.update_url)!=0)
+    {
+        strcpy(oldGeneral->settings.update_url, newGeneral->settings.update_url);
+        printf("set update url: %s\n", oldGeneral->settings.update_url);
+    } 
+    //reportState(oldGeneral);
     free(temp);
+    free(newGeneral);
 }

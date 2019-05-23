@@ -1,0 +1,3 @@
+#!/bin/bash
+source ${A_TOOLS_DIR}/tools.sh
+at_build_lib $@
