@@ -21,6 +21,6 @@ RUN wget https://downloads.arduino.cc/$ARDUINO_PKG \
     && rm $ARDUINO_PKG
 
 RUN mkdir -p /opt/dist \
-    && wget -O /opt/dist/$TOOLCHAIN_PKG_DST https://github.com/esp8266/Arduino/releases/download/2.4.2/$TOOLCHAIN_PKG
+    && wget -O /opt/dist/$TOOLCHAIN_PKG_DST https://github.com/esp8266/Arduino/releases/download/2.3.0/$TOOLCHAIN_PKG
 
 ENTRYPOINT /bin/bash

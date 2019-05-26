@@ -19,4 +19,5 @@ typedef struct GENERAL_TAG
     GeneralSettings settings;
     GeneralState state;
 } General;
+
 #endif

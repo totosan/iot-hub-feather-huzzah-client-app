@@ -68,7 +68,7 @@ RUN chmod +x ${A_TOOLS_DIR}/* && \
 RUN arduino_add_board_url https://adafruit.github.io/arduino-board-index/package_adafruit_index.json,http://arduino.esp8266.com/stable/package_esp8266com_index.json && \
     arduino_install_board arduino:sam && \
     arduino_install_board arduino:samd && \
-    arduino_install_board esp8266:esp8266 && \
+    arduino_install_board esp8266:esp8266:2.4.2 && \
     arduino_install_board adafruit:avr && \
     arduino_install_board adafruit:samd && \
     arduino --pref "compiler.warning_level=all" --save-prefs 2>&1

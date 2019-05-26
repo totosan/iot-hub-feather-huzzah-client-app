@@ -2,7 +2,7 @@ void initSerial()
 {
     // Start serial and initialize stdout
     Serial.begin(115200);
-    Serial.setDebugOutput(true);
+    Serial.setDebugOutput(false);
     Serial.println("Serial successfully inited.");
 }
 
